@@ -21,5 +21,6 @@ tested under Linux 5.0, Ryzen 2700x, 16GB Memory
 
 # References
 
-man page of `epoll`
+manual page of `epoll`
+Computer System A Programmer's Perspective
 RFC2616
