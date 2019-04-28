@@ -1,20 +1,10 @@
-#include <server.hpp>
+#include "server.hpp"
 
-#include <netinet/in.h>
-#include <fcntl.h>
-#include <stdarg.h>
-#include <stdio.h>
-#include <stdlib.h>
-#include <sys/socket.h>
-#include <sys/types.h>
 #include <glog/logging.h>
 
-config_t config {
-    .root = "./",
-    .port = 9999,
-    .timeout = 200,
-    .worker_num = 1
-};
+config_t config;
+
+int epoll_fd;
 
 int server_open_listen_fd() {
     int fd = socket(AF_INET, SOCK_STREAM, 0);
@@ -30,24 +20,27 @@ int server_open_listen_fd() {
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(config.port);
 
-    LOG_IF(FATAL, bind(fd, (sockaddr*)(&serv_addr), sizeof serv_addr) < 0))
+    LOG_IF(FATAL, bind(fd, (sockaddr*)(&serv_addr), sizeof serv_addr) < 0)
         << "bind";
 
     LOG_IF(FATAL, listen(fd, LISTENQ) < 0)
         << "listen";
 
+    LOG(INFO) << "PID: " << getpid() << " started listening on: " << config.port;
+
     return fd;
-
 }
 
-int server_accept(int fd) {
-}
+// pool_t<connection_t, MAX_CONCURRENT_NUM> pool;
+connection_t fd2connection[MAX_FD];
 
-int sock_status[MAX_FD];
+// int server_handle_request(int fd) {
 
-void server_handle_response(int fd) {
+// }
 
-}
+// int server_response(int fd) {
+
+// }
 
 void setup() {
 
