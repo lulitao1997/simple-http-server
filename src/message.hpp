@@ -2,7 +2,7 @@
 #define MESSAGE_HPP_
 
 #include <functional>
-#include <connection.hpp>
+#include "connection.hpp"
 
 struct message_t {
     connection_t c;

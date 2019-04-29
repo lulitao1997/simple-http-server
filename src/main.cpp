@@ -18,10 +18,10 @@
 epoll_event ev, events[MAX_CONCURRENT_NUM];
 
 int main(int argc, char *argv[]) {
-    signal(SIGPIPE, SIG_IGN); // ignore SIGPIPE
+    FLAGS_colorlogtostderr = true;
 
-    // epoll_event *events = (epoll_event*)calloc(MAX_CONCURRENT_NUM, sizeof(epoll_event)); // TODO: dynamically increase MAX_CONCURRENT_NUM
-    // epoll_event ev;
+
+    signal(SIGPIPE, SIG_IGN); // ignore SIGPIPE
 
     int listen_fd = server_open_listen_fd();
     DLOG(INFO) << "listen_fd: " << listen_fd;
@@ -43,7 +43,7 @@ int main(int argc, char *argv[]) {
         for (int i=0; i<nfds; i++) {
             // LOG_IF(FATAL, events[i].events & EPOLLERR)
             //     << "error in epoll_wait";
-            DLOG(INFO) << "events fd: " << events[i].data.fd;
+            // DLOG(INFO) << "events fd: " << events[i].data.fd;
 
             int efd = events[i].data.fd;
 
@@ -54,14 +54,9 @@ int main(int argc, char *argv[]) {
                 LOG_IF(FATAL, conn_sock < 0) << "accept4";
                 // edge-triggered, make sure we wait after consumed all the things in the r/w buffer
                 ev.events = EPOLLIN | EPOLLET;
-                // ev.data.fd = conn_sock;
-                // get a new connection_t
-                DLOG(INFO) << "new peer, fd: " << conn_sock;
-                // connection_t *c = pool.alloc(conn_sock, time(NULL), addr, ev);
-                // ev.data.ptr = c;
+                // DLOG(INFO) << "new peer, fd: " << conn_sock;
                 ev.data.fd = conn_sock;
                 fd2connection[conn_sock] = connection_t(conn_sock, time(NULL), addr, ev);
-
 
                 LOG_IF(FATAL, epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_sock, &ev) < 0)
                     << "epoll_ctl: conn_sock";
@@ -69,13 +64,16 @@ int main(int argc, char *argv[]) {
                 // server_register_event(conn_sock, ev);
             }
             else { // Existing peer is ready
+                connection_t &c = fd2connection[efd];
                 if (events[i].events & EPOLLIN) { // ready reading
-                    DLOG(INFO) << "in event: " << efd;
-                    fd2connection[efd].handle_request();
+                    // DLOG(INFO) << "in event: " << efd << ", " << fd2connection + efd;
+                    if (c.handle_request() <= 0)
+                        c.close();
                 }
                 else if (events[i].events & EPOLLOUT) { // ready for echoing
-                    DLOG(INFO) << "out event: " << efd;
-                    fd2connection[efd].handle_response();
+                    // DLOG(INFO) << "out event: " << efd;
+                    if (c.handle_response() < 0)
+                        c.close();
                 }
                 else {
                     LOG(FATAL) << "should not reach here";
