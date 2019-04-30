@@ -1,4 +1,5 @@
 #include "server.hpp"
+#include "mime.hpp"
 
 #include <sys/time.h>
 
@@ -44,10 +45,31 @@ connection_t fd2connection[MAX_FD];
 
 // }
 
+std::unordered_map<view_t, const char*> mime_map;
+
 void setup() {
     connection_t::psetting.on_url = on_url;
     connection_t::psetting.on_message_complete = on_message_complete;
+    mime_map = {
+        {"html", "text/html"},
+        {"htm", "text/html"},
+        {"txt", "text/plain"},
+        {"css", "text/css"},
+        {"js", "application/javascript"},
+        {"xml", "text/xml"},
 
+        {"jpg", "image/jpeg"},
+        {"jpeg", "image/jpeg"},
+        {"gif", "image/gif"},
+        {"png", "image/png"},
+        {"webm", "image/webm"},
+        {"svg", "image/svg+xml"},
+
+        {"pdf", "application/pdf"},
+
+        {"mp4", "video/mp4"},
+        {"mkv", "video/mkv"},
+    };
 }
 
 mtime_t mtime() {

@@ -55,7 +55,7 @@ int main(int argc, char *argv[]) {
                 static sockaddr_in addr;
                 socklen_t saddrlen = sizeof addr;
                 int conn_sock = accept4(listen_fd, (sockaddr*)&addr, &saddrlen, SOCK_NONBLOCK);
-                LOG_IF(FATAL, conn_sock < 0) << "accept4";
+                LOG_IF(FATAL, conn_sock < 0) << "accept4 " << strerror(errno);
                 LOG_IF(FATAL, conn_sock >= MAX_FD) << "conn_sock: " << conn_sock << " is too large.";
                 // edge-triggered, make sure we wait after consumed all the things in the r/w buffer
                 ev.events = EPOLLIN | EPOLLET;

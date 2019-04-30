@@ -32,6 +32,16 @@ struct response_t {
     bool keep_alive=0;
     size_t content_length=0;
     int fd=0;
+
+    const char *mime = nullptr;
+
+    void set_error_response(int err) {
+        http_major = 1; http_minor = 0;
+        status_code = err;
+        keep_alive = false;
+        mime = "text/plain";
+        fd = 0;
+    }
 };
 
 struct connection_t {
@@ -88,6 +98,7 @@ struct connection_t {
 
     int handle_request();
     int handle_response();
+    int set_error_response(int err);
     int assemble_header();
     int send_header();
     int send_file();

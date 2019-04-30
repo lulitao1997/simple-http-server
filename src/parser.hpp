@@ -12,7 +12,7 @@ struct parse_result_t {
 struct connection_t;
 
 
-void peer_finished_request(connection_t *c);
+// void peer_finished_request(connection_t *c);
 
 struct view_t {
     const char *pos = nullptr;
@@ -44,8 +44,6 @@ struct parser_t {
     view_t method, uri, version;
 
     int keep_alive = 0;
-
-    std::function<void(connection_t*)> on_request_end = peer_finished_request;
 };
 
 #endif

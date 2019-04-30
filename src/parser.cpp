@@ -20,7 +20,7 @@ int parser_t::step(const char *buf, int n) {
             is_first_line = false;
             if (crlf_cnt) {
                 // DLOG(INFO) << "request end encountered..";
-                on_request_end(c);
+                // on_request_end(c);
             }
             crlf_cnt++;
         }

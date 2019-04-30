@@ -1,6 +1,7 @@
 #include "connection.hpp"
 #include "server.hpp"
-#include "parser.hpp"
+// #include "parser.hpp"
+#include "mime.hpp"
 
 #include <sys/socket.h>
 #include <netdb.h>
@@ -30,6 +31,7 @@ void connection_t::refresh() {
     // clear send_buf
     send_buf.clear();
     total_nsend = 0;
+    if (response.fd) LOG_IF(WARNING, ::close(response.fd)) << "close: " << strerror(errno);
     response = response_t{};
 
     // reset parser states.
@@ -39,15 +41,6 @@ void connection_t::refresh() {
 
 int connection_t::handle_request() {
     static char usrbuf[USRBUF_SIZE]; // no multi-thread, don't worry.
-    #ifndef NDEBUG
-    static char hostname[8192], port[8192];
-    sockaddr_storage client_addr;
-    // DLOG_IF(FATAL, getnameinfo((sockaddr*)&addr, sizeof addr, hostname, 8192, port, 8192, 0));
-    // DLOG(INFO) << "peer " << hostname << ":" << port << " is sending...";
-    // DLOG(INFO) << "request fd: " << ev.data.fd << ", " << fd;
-    #endif
-
-    // parser_t parser(this, recv_buf);
 
     ssize_t nread;
     int total_read;
@@ -55,7 +48,7 @@ int connection_t::handle_request() {
         nread = read(fd, usrbuf, USRBUF_SIZE);
         if (nread < 0) {
             if (errno != EAGAIN) {
-                LOG(WARNING) << "connection reset by peer: " << fd;
+                LOG(WARNING) << "connection reset by peer: " << fd << " " << strerror(errno);
                 return -1;
             }
             else return EAGAIN;
@@ -63,24 +56,14 @@ int connection_t::handle_request() {
 
         int nparsed = http_parser_execute(&parser, &psetting, usrbuf, nread);
         if (nparsed < nread) {
-            // TODO: Bad request
-            return -1;
+            response.set_error_response(400);
+            on_message_complete(&parser);
+            return EAGAIN; // TODO: too ugly...
         }
-
 
         if (nread == 0) { // EOF
-            // DLOG(INFO) << "peer " << hostname << ":" << port << " finished sending";
-            // LOG_IF(WARNING, close(fd));
             return 0;
         }
-
-        // #ifndef NDEBUG
-        // using namespace std;
-        // cerr << "recv_buf: ";
-        // for (char c: recv_buf) cerr << c;
-        // cerr << endl;
-        // #endif
-
     }
 }
 
@@ -106,12 +89,14 @@ int connection_t::assemble_header() {
         "Server: %s/%s\r\n", SERVER_STR, SERVER_VER
     );
     len += sprintf(send_buf.data()+len,
-        "Content-Type: %s\r\n", "text/html" // TODO: mime type according to file extension...
+        "Content-Type: %s\r\n", r.mime
     );
-    len += sprintf(send_buf.data()+len,
-        "Content-Length: %zu\r\n",
-        r.content_length
-    );
+    if (r.status_code == 200) {
+        len += sprintf(send_buf.data()+len,
+            "Content-Length: %zu\r\n",
+            r.content_length
+        );
+    }
     if (r.http_major == 1 && r.http_minor ==1)
         len += sprintf(send_buf.data()+len,
             "Connection: %s\r\n",
@@ -135,8 +120,10 @@ int connection_t::handle_response() {
         int ret = send_header();
         DLOG(INFO) << "header: " << total_nsend << ", " << send_buf.size() << ", " << ret << fd;
         DLOG(INFO) << "header: " << std::string(send_buf.begin(), send_buf.end());
-        if (ret == 0)
-            return send_file();
+        if (ret == 0) {
+            if (response.status_code == 200) return send_file();
+            else return -1;
+        }
         else return ret;
     }
     else return send_file();
@@ -147,18 +134,6 @@ int connection_t::send_file() {
     if (response.status_code != 200)
         return 0;
 
-    #ifndef NDEBUG
-    char hostname[8192], port[8192];
-    sockaddr_storage client_addr;
-    DLOG_IF(FATAL, getnameinfo((sockaddr*)&addr, sizeof addr, hostname, 8192, port, 8192, 0));
-    // DLOG(INFO) << "peer " << hostname << ":" << port << " is recevieing...";
-    #endif
-
-    // DLOG(INFO) << "respond fd: " << ev.data.fd << ", " << fd;
-
-    // send_buf.insert(send_buf.end(), sample_response, sample_response + strlen(sample_response));
-
-    // DLOG(INFO) << "sending file... " << response.status_code << ", " << response.fd;
     ssize_t nsend, total_nsend=0;
     for(;;) {
         int nsend = sendfile(fd, response.fd, nullptr, response.content_length);
@@ -180,23 +155,8 @@ int connection_t::send_file() {
 }
 
 int connection_t::send_header() {
-    // TODO: assemble response according to request...
-    #ifndef NDEBUG
-    char hostname[8192], port[8192];
-    sockaddr_storage client_addr;
-    // DLOG_IF(FATAL, getnameinfo((sockaddr*)&addr, sizeof addr, hostname, 8192, port, 8192, 0));
-    // DLOG(INFO) << "peer " << hostname << ":" << port << " is recevieing...";
-    #endif
-
-    // if (!sample_response_len) sample_response_len = strlen(sample_response);
-
-    // DLOG(INFO) << "respond fd: " << ev.data.fd << ", " << fd;
-
-    // send_buf.insert(send_buf.end(), sample_response, sample_response + strlen(sample_response));
-
     ssize_t nsend;
     for(;;) {
-        // nsend = write(fd, sample_response+total_nsend, sample_response_len-total_nsend);
         nsend = write(fd, send_buf.data()+total_nsend, send_buf.size()-total_nsend);
         if (nsend < 0) {
             if (errno == EAGAIN) {
@@ -224,10 +184,6 @@ int on_url(http_parser *p, const char *at, size_t len) {
     auto c = (connection_t*)p->data;
     response_t& r = c->response;
 
-    // r.http_major = p->http_major;
-    // r.http_minor = p->http_minor;
-    // LOG(INFO) << "sldkfjsldkfj" << p->http_major;
-
     if (!dir_fd) {
         dir_fd = open(config.root, O_DIRECTORY);
         LOG_IF(FATAL, dir_fd < 0) << "open dir: " << strerror(errno);
@@ -246,13 +202,26 @@ int on_url(http_parser *p, const char *at, size_t len) {
     r.fd = openat(dir_fd, path_buf, O_RDONLY);
     if (r.fd < 0) {
         LOG(WARNING) << "open file " << path_buf << ": " << strerror(errno);
-        r.http_major = 1;
-        r.http_minor = 0;
-        r.status_code = 404;
-        r.keep_alive = false;
+        r.set_error_response(404);
         return 0;
         // return -1;
     }
+
+    LOG_IF(FATAL, fstat(r.fd, &st)) << "stat: " << strerror(errno);
+
+    if (S_ISDIR(st.st_mode)) {
+        int old_fd = r.fd;
+        r.fd = openat(old_fd, "index.html", O_RDONLY);
+        r.mime = mime_map["html"];
+        close(old_fd);
+    }
+
+    // get extension
+    const char *t = nullptr;
+    for (int i=0; i<len; i++)
+        if (at[i] == '.') t = at+i;
+    if (t) r.mime = mime_map[(view_t){t+1, at+len}];
+
     LOG_IF(FATAL, fstat(r.fd, &st)) << "stat: " << strerror(errno);
     // LOG(INFO) << "r.fd: " << r.fd;
     r.content_length = st.st_size;
@@ -260,20 +229,15 @@ int on_url(http_parser *p, const char *at, size_t len) {
     return 0;
 }
 
-// TODO: keep alive....
 int on_message_complete(http_parser *p) {
-    // disable read and enable write...
-    // DLOG(INFO) << "request finished.....";
-    LOG(INFO) << "laksjdflkjldks" << p->http_major;
-
     auto c = (connection_t*)p->data;
     c->ev.events |= EPOLLOUT;
     c->ev.events &= ~EPOLLIN;
     LOG_IF(WARNING, epoll_ctl(epoll_fd, EPOLL_CTL_MOD, c->fd, &c->ev)) << "epoll_ctl request";
 
     auto& r = c->response;
-    r.keep_alive = http_should_keep_alive(p) ;
     if (!r.http_major) {
+        r.keep_alive = http_should_keep_alive(p) ;
         r.http_major = p->http_major;
         r.http_minor = p->http_minor;
     }
@@ -282,8 +246,6 @@ int on_message_complete(http_parser *p) {
 }
 
 void connection_t::peer_finished_respond() {
-    DLOG(INFO) << "peer " << fd << " finished respond: " << response.keep_alive;
-
     if (response.keep_alive) {
         ev.events |= EPOLLIN;
         ev.events &= ~EPOLLOUT;
@@ -304,7 +266,6 @@ void connection_t::close_expired() {
     #ifndef NDEBUG
     int closed_num = 0;
     #endif
-    // DLOG(INFO) << S.begin()->first << ", " << now;
     while(!S.empty() && S.begin()->first + config.timeout < now) {
         DLOG_IF(FATAL, !S.begin()->second->fd) << "invalid element.";
         S.begin()->second->close();
@@ -314,5 +275,7 @@ void connection_t::close_expired() {
         #endif
     }
 
+    #ifndef NDEBUG
     DLOG_IF(INFO, closed_num) << "closed " << closed_num << " connections, " << S.size() << "left.";
+    #endif
 }
