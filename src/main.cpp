@@ -17,9 +17,18 @@
 
 epoll_event ev, events[MAX_CONCURRENT_NUM];
 
+void sigint_handler(int signum) {
+    if (signum == SIGINT) {
+        kill(-getpid(), SIGINT);
+        LOG(WARNING) << "worker " << getpid() << " exiting...";
+        exit(0);
+    }
+}
+
 int main(int argc, char *argv[]) {
     FLAGS_colorlogtostderr = true;
-
+    FLAGS_logbufsecs = 0;
+    setup();
 
     signal(SIGPIPE, SIG_IGN); // ignore SIGPIPE
 
@@ -36,49 +45,48 @@ int main(int argc, char *argv[]) {
     LOG_IF(FATAL, epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &ev) < 0)
         << "epoll_ctl";
 
-
     for (;;) {
-        int nfds = epoll_wait(epoll_fd, events, MAX_CONCURRENT_NUM, -1);
+        int nfds = epoll_wait(epoll_fd, events, MAX_CONCURRENT_NUM, 20);
         LOG_IF(FATAL, nfds < 0) << "error in epoll_wait";
         for (int i=0; i<nfds; i++) {
-            // LOG_IF(FATAL, events[i].events & EPOLLERR)
-            //     << "error in epoll_wait";
-            // DLOG(INFO) << "events fd: " << events[i].data.fd;
-
             int efd = events[i].data.fd;
 
-            if (efd== listen_fd) { // Listening socket is ready
+            if (efd == listen_fd) { // Listening socket is ready
                 static sockaddr_in addr;
                 socklen_t saddrlen = sizeof addr;
                 int conn_sock = accept4(listen_fd, (sockaddr*)&addr, &saddrlen, SOCK_NONBLOCK);
                 LOG_IF(FATAL, conn_sock < 0) << "accept4";
+                LOG_IF(FATAL, conn_sock >= MAX_FD) << "conn_sock: " << conn_sock << " is too large.";
                 // edge-triggered, make sure we wait after consumed all the things in the r/w buffer
                 ev.events = EPOLLIN | EPOLLET;
                 // DLOG(INFO) << "new peer, fd: " << conn_sock;
                 ev.data.fd = conn_sock;
-                fd2connection[conn_sock] = connection_t(conn_sock, time(NULL), addr, ev);
+                fd2connection[conn_sock].construct(conn_sock, time(NULL), addr, ev);
 
                 LOG_IF(FATAL, epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_sock, &ev) < 0)
                     << "epoll_ctl: conn_sock";
-
-                // server_register_event(conn_sock, ev);
             }
             else { // Existing peer is ready
                 connection_t &c = fd2connection[efd];
                 if (events[i].events & EPOLLIN) { // ready reading
                     // DLOG(INFO) << "in event: " << efd << ", " << fd2connection + efd;
-                    if (c.handle_request() <= 0)
+                    if (c.handle_request() <= 0) // 0 = client closed, we should also close it.
                         c.close();
                 }
                 else if (events[i].events & EPOLLOUT) { // ready for echoing
                     // DLOG(INFO) << "out event: " << efd;
-                    if (c.handle_response() < 0)
+                    int ret = c.handle_response();
+                    if (ret < 0)
                         c.close();
+                    else if (ret == 0)
+                        c.peer_finished_respond();
+
                 }
                 else {
-                    LOG(FATAL) << "should not reach here";
+                    LOG(WARNING) << "should not reach here";
                 }
             }
         }
+        connection_t::close_expired();
     }
 }

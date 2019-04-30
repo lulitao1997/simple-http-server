@@ -15,7 +15,7 @@ void parse_arguments(int argc, char *argv[]) {
     while ((opt = getopt(argc, argv, "r:p:t:n:")) != -1) {
         switch (opt) {
         case 'r':
-            config.root = std::string(optarg);
+            strcpy(config.root, optarg);
             break;
         case 'p':
             config.port = atoi(optarg);
@@ -34,7 +34,7 @@ void parse_arguments(int argc, char *argv[]) {
 
     // check wether the root dir exists
     struct stat info;
-    LOG_IF(FATAL, stat(config.root.c_str(), &info) != 0)
+    LOG_IF(FATAL, stat(config.root, &info) != 0)
         << "root dir \"" << config.root << "\" does not exist.\n";
 }
 

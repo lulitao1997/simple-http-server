@@ -1,5 +1,7 @@
 #include "server.hpp"
 
+#include <sys/time.h>
+
 #include <glog/logging.h>
 
 config_t config;
@@ -43,6 +45,17 @@ connection_t fd2connection[MAX_FD];
 // }
 
 void setup() {
+    connection_t::psetting.on_url = on_url;
+    connection_t::psetting.on_message_complete = on_message_complete;
 
 }
 
+mtime_t mtime() {
+    struct timeval tv;
+
+    gettimeofday(&tv, NULL);
+
+    return (mtime_t)(tv.tv_sec) * 1000 +
+           (mtime_t)(tv.tv_usec) / 1000;
+
+}

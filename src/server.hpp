@@ -14,21 +14,24 @@
 #include <sys/types.h>
 #include <sys/epoll.h>
 
-const int MAX_CONCURRENT_NUM = 30000;
-const int MAX_FD = 110000;
+const int MAX_CONCURRENT_NUM = 1024 * 10;
+const int MAX_FD = 1110000;
 const int LISTENQ = 1024;
+const int MAXPATH = 1024;
+
+typedef unsigned long long mtime_t;
 
 struct config_t {
-    std::string root;
+    char root[MAXPATH];
     int port;
-    int timeout;
+    mtime_t timeout;
     int worker_num;
 
     config_t():
         root("./"),
         port(9999),
         timeout(200),
-        worker_num(1)
+        worker_num(4)
     {}
 };
 
@@ -43,5 +46,7 @@ int server_open_listen_fd();
 // int server_response(int fd);
 int server_register_event(int fd, const epoll_event& ev);
 void setup();
+
+mtime_t mtime();
 
 #endif
