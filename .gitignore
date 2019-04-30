@@ -3,3 +3,4 @@ cmake-build-debug
 .idea
 .directory
 .vscode
+compile_commands.json

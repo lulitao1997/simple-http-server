@@ -53,13 +53,11 @@ struct connection_t {
     connection_t& operator=(const connection_t& ) = delete;
     connection_t(const connection_t& ) = delete;
 
-    // connection_t& operator =(connection_t&& rhs) {
     void construct(int _fd, int _accept_time, sockaddr_in _addr, epoll_event _ev) {
-        // DLOG_IF(FATAL, fcntl(fd, F_GETFD) != -1 || errno != EBADF)
-        //     << "fd " << fd << " still open when assigning other...";
         close(); // TODO: maybe assert(!fd) ?
         refresh();
         std::tie(fd, accept_time, addr, ev) = std::make_tuple(_fd, _accept_time, _addr, _ev);
+
     }
 
     void refresh();
@@ -75,9 +73,6 @@ struct connection_t {
         DLOG(INFO) << "dstr: " << fd;
 
         S.erase(set_ptr);
-        // DLOG(INFO) << "befor erase: " << S.size();
-        // S.erase(set_ptr);
-        // DLOG(INFO) << "after erase: " << S.size();
 
         LOG_IF(FATAL, epoll_ctl(epoll_fd, EPOLL_CTL_DEL, fd, nullptr))
             << "epoll_ctl del: " << strerror(errno);
@@ -88,8 +83,6 @@ struct connection_t {
 
     static void close_expired();
 
-    // buffer_t recv_buf, send_buf; // TODO: custom allocator
-    // parser_t parser;
     buffer_t send_buf;
     int total_nsend;
     http_parser parser;
@@ -102,17 +95,14 @@ struct connection_t {
     int assemble_header();
     int send_header();
     int send_file();
-    void peer_finished_respond();
+    void finish_respond();
 
 };
 
 const int USRBUF_SIZE = 8192;
 
-// void peer_finished_request(connection_t *c);
-
 int on_url(http_parser *p, const char *at, size_t len);
 int on_message_complete(http_parser *p);
-// void peer_finished_respond(connection_t *c);
 
 
 #endif

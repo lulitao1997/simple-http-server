@@ -53,6 +53,7 @@ int connection_t::handle_request() {
             }
             else return EAGAIN;
         }
+        DLOG(INFO) << ">>> MESSGAE: " << usrbuf;
 
         int nparsed = http_parser_execute(&parser, &psetting, usrbuf, nread);
         if (nparsed < nread) {
@@ -120,8 +121,6 @@ int connection_t::handle_response() {
 
     if (total_nsend < send_buf.size()) {
         int ret = send_header();
-        DLOG(INFO) << "header: " << total_nsend << ", " << send_buf.size() << ", " << ret << fd;
-        DLOG(INFO) << "header: " << std::string(send_buf.begin(), send_buf.end());
         if (ret == 0) {
             if (response.status_code == 200) return send_file();
             else return -1;
@@ -165,24 +164,20 @@ int connection_t::send_header() {
                 return EAGAIN;
             }
             else {
-                DLOG(WARNING) << "connection closed by peer: " << strerror(errno);
+                DLOG(WARNING) << "connection closed by peer: " << fd << strerror(errno);
                 return -1;
             }
         }
-        else if (nsend == 0) {
-            // peer_finished_respond();
+        else if (nsend == 0)
             return 0;
-        }
-        else {
+        else
             total_nsend += nsend;
-        }
     }
 }
 
 int on_url(http_parser *p, const char *at, size_t len) {
     static char path_buf[MAXPATH] = "";
     static int dir_fd = 0;
-    // static const char *index_html = "/index.html";
     auto c = (connection_t*)p->data;
     response_t& r = c->response;
 
@@ -191,10 +186,6 @@ int on_url(http_parser *p, const char *at, size_t len) {
         LOG_IF(FATAL, dir_fd < 0) << "open dir: " << strerror(errno);
     }
 
-    // if (len == 1 && at[0] == '/') {
-    //     at = index_html;
-    //     len = 11;
-    // }
     DLOG(INFO) << "PATH: " << std::string(at, at+len) << "|";
     int plen = 0;
     const char *dot_pos = nullptr;
@@ -206,15 +197,19 @@ int on_url(http_parser *p, const char *at, size_t len) {
     }
     path_buf[plen] = '\0';
 
+    auto check = [&]() {
+        if (r.fd < 0) {
+            LOG(WARNING) << "open file " << config.root << (plen ? path_buf : "./") << ": " << strerror(errno);
+            r.set_error_response(404);
+            return -1;
+        }
+        return 0;
+    };
+
     struct stat st;
     r.fd = openat(dir_fd, plen ? path_buf : "./", O_RDONLY);
-    if (r.fd < 0) {
-        DLOG(INFO) << "path_buf: |" << path_buf << '|';
-        LOG(WARNING) << "open file " << config.root << (plen ? path_buf : "./") << ": " << strerror(errno);
-        r.set_error_response(404);
-        return 0;
-        // return -1;
-    }
+
+    if (check()) return 0;
 
     LOG_IF(FATAL, fstat(r.fd, &st)) << "stat: " << strerror(errno);
 
@@ -225,11 +220,11 @@ int on_url(http_parser *p, const char *at, size_t len) {
         close(old_fd);
     }
 
+    if (check()) return 0;
+
     // get extension
     if (dot_pos) r.mime = mime_map[(view_t){dot_pos+1, at+len}];
-
     LOG_IF(FATAL, fstat(r.fd, &st)) << "stat: " << strerror(errno);
-    // LOG(INFO) << "r.fd: " << r.fd;
     r.content_length = st.st_size;
 
     return 0;
@@ -251,7 +246,7 @@ int on_message_complete(http_parser *p) {
     return 0;
 }
 
-void connection_t::peer_finished_respond() {
+void connection_t::finish_respond() {
     if (response.keep_alive) {
         ev.events |= EPOLLIN;
         ev.events &= ~EPOLLOUT;

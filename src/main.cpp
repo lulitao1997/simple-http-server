@@ -1,9 +1,12 @@
 #include "server.hpp"
+#include "utils.hpp"
+#include <netinet/tcp.h>
 #include <glog/logging.h>
 
 epoll_event ev, events[MAX_CONCURRENT_NUM];
 
 int main(int argc, char *argv[]) {
+    parse_arguments(argc, argv);
     setup();
 
     int listen_fd = server_open_listen_fd();
@@ -14,7 +17,6 @@ int main(int argc, char *argv[]) {
 
     ev.events = EPOLLIN;
     ev.data.fd = listen_fd;
-    // ev.data.ptr = pool.alloc(listen_fd, 0, ); //UNION!!!!!
 
     LOG_IF(FATAL, epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &ev) < 0)
         << "epoll_ctl";
@@ -29,11 +31,17 @@ int main(int argc, char *argv[]) {
                 static sockaddr_in addr;
                 socklen_t saddrlen = sizeof addr;
                 int conn_sock = accept4(listen_fd, (sockaddr*)&addr, &saddrlen, SOCK_NONBLOCK);
+
+                // very important! eliminate 40ms delay,
+                // see https://www.fanhaobai.com/2017/11/40ms-delay-and-tcp-nodelay.html
+                static int enable = 1;
+                setsockopt(conn_sock, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof enable);
+
                 LOG_IF(FATAL, conn_sock < 0) << "accept4 " << strerror(errno);
                 LOG_IF(FATAL, conn_sock >= MAX_FD) << "conn_sock: " << conn_sock << " is too large.";
+
                 // edge-triggered, make sure we wait after consumed all the things in the r/w buffer
                 ev.events = EPOLLIN | EPOLLET;
-                // DLOG(INFO) << "new peer, fd: " << conn_sock;
                 ev.data.fd = conn_sock;
                 fd2connection[conn_sock].construct(conn_sock, time(NULL), addr, ev);
 
@@ -43,18 +51,15 @@ int main(int argc, char *argv[]) {
             else { // Existing peer is ready
                 connection_t &c = fd2connection[efd];
                 if (events[i].events & EPOLLIN) { // ready reading
-                    // DLOG(INFO) << "in event: " << efd << ", " << fd2connection + efd;
-                    if (c.handle_request() <= 0) // 0 = client closed, we should also close it.
+                    if (c.handle_request() <= 0) // 0 = client closed properly, we should also close it.
                         c.close();
                 }
                 else if (events[i].events & EPOLLOUT) { // ready for echoing
-                    // DLOG(INFO) << "out event: " << efd;
                     int ret = c.handle_response();
                     if (ret < 0)
                         c.close();
                     else if (ret == 0)
-                        c.peer_finished_respond();
-
+                        c.finish_respond();
                 }
                 else {
                     LOG(WARNING) << "should not reach here";

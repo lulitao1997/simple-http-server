@@ -12,8 +12,6 @@ struct parse_result_t {
 struct connection_t;
 
 
-// void peer_finished_request(connection_t *c);
-
 struct view_t {
     const char *pos = nullptr;
     size_t len = 0;

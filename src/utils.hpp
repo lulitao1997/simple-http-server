@@ -10,7 +10,7 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 
-void parse_arguments(int argc, char *argv[]) {
+inline void parse_arguments(int argc, char *argv[]) {
     int opt;
     while ((opt = getopt(argc, argv, "r:p:t:n:")) != -1) {
         switch (opt) {

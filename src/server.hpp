@@ -30,21 +30,17 @@ struct config_t {
     config_t():
         root("./"),
         port(9999),
-        timeout(2000), // 200ms
+        timeout(2000), // 2 seconds.
         worker_num(4)
     {}
 };
 
 extern config_t config;
-// extern pool_t<connection_t, MAX_CONCURRENT_NUM> pool;
 extern connection_t fd2connection[MAX_FD];
 
 extern int epoll_fd;
 
 int server_open_listen_fd();
-// int server_handle_request(int fd);
-// int server_response(int fd);
-int server_register_event(int fd, const epoll_event& ev);
 void setup();
 
 mtime_t mtime();

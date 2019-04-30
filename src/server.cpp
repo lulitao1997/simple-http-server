@@ -49,16 +49,7 @@ int server_open_listen_fd() {
     return fd;
 }
 
-// pool_t<connection_t, MAX_CONCURRENT_NUM> pool;
 connection_t fd2connection[MAX_FD];
-
-// int server_handle_request(int fd) {
-
-// }
-
-// int server_response(int fd) {
-
-// }
 
 std::unordered_map<view_t, const char*> mime_map;
 
