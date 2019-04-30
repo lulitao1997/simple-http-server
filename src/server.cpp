@@ -1,6 +1,21 @@
 #include "server.hpp"
 #include "mime.hpp"
 
+#include <sys/types.h>
+
+#include <signal.h>
+#include <sys/epoll.h>
+#include <netinet/in.h>
+#include <assert.h>
+#include <errno.h>
+#include <stdbool.h>
+#include <stdint.h>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <sys/epoll.h>
+#include <sys/socket.h>
+#include <unistd.h>
 #include <sys/time.h>
 
 #include <glog/logging.h>
@@ -47,9 +62,25 @@ connection_t fd2connection[MAX_FD];
 
 std::unordered_map<view_t, const char*> mime_map;
 
+void sigint_handler(int signum) {
+    if (signum == SIGINT) {
+        kill(-getpid(), SIGINT);
+        LOG(WARNING) << "worker " << getpid() << " exiting...";
+        exit(0);
+    }
+}
+
 void setup() {
+    signal(SIGPIPE, SIG_IGN); // ignore SIGPIPE
+    signal(SIGINT, sigint_handler);
+
+    FLAGS_colorlogtostderr = true;
+    FLAGS_logbufsecs = 0;
+
     connection_t::psetting.on_url = on_url;
     connection_t::psetting.on_message_complete = on_message_complete;
+
+
     mime_map = {
         {"html", "text/html"},
         {"htm", "text/html"},
@@ -70,6 +101,12 @@ void setup() {
         {"mp4", "video/mp4"},
         {"mkv", "video/mkv"},
     };
+
+    for (int i=1; i<config.worker_num; i++) {
+        int ret = fork();
+        if (ret == 0) break;
+        LOG_IF(FATAL, ret < 0) << "fork: " << strerror(errno);
+    }
 }
 
 mtime_t mtime() {

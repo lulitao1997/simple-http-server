@@ -1,5 +1,10 @@
 
 #
+uses epoll to watch io events.
+
+#
+http1.0 / http 1.1
+keep-alive
 
 
 
@@ -11,7 +16,7 @@
 before testing, make sure that:
 
 - `ulimit -n` is large enough
--
+- max-system-watch
 
 # Results
 

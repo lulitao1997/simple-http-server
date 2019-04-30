@@ -30,7 +30,7 @@ struct config_t {
     config_t():
         root("./"),
         port(9999),
-        timeout(2000), // 2s
+        timeout(2000), // 200ms
         worker_num(4)
     {}
 };

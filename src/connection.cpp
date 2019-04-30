@@ -48,7 +48,7 @@ int connection_t::handle_request() {
         nread = read(fd, usrbuf, USRBUF_SIZE);
         if (nread < 0) {
             if (errno != EAGAIN) {
-                LOG(WARNING) << "connection reset by peer: " << fd << " " << strerror(errno);
+                LOG(WARNING) << "peer " << fd << ": " << strerror(errno);
                 return -1;
             }
             else return EAGAIN;
@@ -106,7 +106,9 @@ int connection_t::assemble_header() {
     len += sprintf(send_buf.data()+len, "\r\n");
 
     if (r.status_code != 200) {
-        len += sprintf(send_buf.data()+len, "error: %s\r\n", http_status_str((http_status)r.status_code));
+        len += sprintf(send_buf.data()+len,
+                       "error: %d %s\r\n",
+                       r.status_code, http_status_str((http_status)r.status_code));
     }
 
     send_buf.resize(len);
@@ -180,7 +182,7 @@ int connection_t::send_header() {
 int on_url(http_parser *p, const char *at, size_t len) {
     static char path_buf[MAXPATH] = "";
     static int dir_fd = 0;
-    static const char *index_html = "/index.html";
+    // static const char *index_html = "/index.html";
     auto c = (connection_t*)p->data;
     response_t& r = c->response;
 
@@ -189,19 +191,26 @@ int on_url(http_parser *p, const char *at, size_t len) {
         LOG_IF(FATAL, dir_fd < 0) << "open dir: " << strerror(errno);
     }
 
-    if (len == 1 && at[0] == '/') {
-        at = index_html;
-        len = 11;
+    // if (len == 1 && at[0] == '/') {
+    //     at = index_html;
+    //     len = 11;
+    // }
+    DLOG(INFO) << "PATH: " << std::string(at, at+len) << "|";
+    int plen = 0;
+    const char *dot_pos = nullptr;
+    for (; plen+1<len; plen++) {
+        path_buf[plen] = at[plen+1];
+        if (at[plen+1] == '.') dot_pos = at+plen+1;
+        if (at[plen+1] == '?')
+            break;
     }
-
-    for (int i=1; i<len; i++)
-        path_buf[i-1] = at[i];
-    path_buf[len-1] = '\0';
+    path_buf[plen] = '\0';
 
     struct stat st;
-    r.fd = openat(dir_fd, path_buf, O_RDONLY);
+    r.fd = openat(dir_fd, plen ? path_buf : "./", O_RDONLY);
     if (r.fd < 0) {
-        LOG(WARNING) << "open file " << path_buf << ": " << strerror(errno);
+        DLOG(INFO) << "path_buf: |" << path_buf << '|';
+        LOG(WARNING) << "open file " << config.root << (plen ? path_buf : "./") << ": " << strerror(errno);
         r.set_error_response(404);
         return 0;
         // return -1;
@@ -217,10 +226,7 @@ int on_url(http_parser *p, const char *at, size_t len) {
     }
 
     // get extension
-    const char *t = nullptr;
-    for (int i=0; i<len; i++)
-        if (at[i] == '.') t = at+i;
-    if (t) r.mime = mime_map[(view_t){t+1, at+len}];
+    if (dot_pos) r.mime = mime_map[(view_t){dot_pos+1, at+len}];
 
     LOG_IF(FATAL, fstat(r.fd, &st)) << "stat: " << strerror(errno);
     // LOG(INFO) << "r.fd: " << r.fd;

@@ -33,7 +33,7 @@ struct response_t {
     size_t content_length=0;
     int fd=0;
 
-    const char *mime = nullptr;
+    const char *mime = "text/plain";
 
     void set_error_response(int err) {
         http_major = 1; http_minor = 0;
