@@ -15,7 +15,7 @@
 #include <sys/epoll.h>
 
 const int MAX_CONCURRENT_NUM = 1024 * 10;
-const int MAX_FD = 1110000;
+const int MAX_FD = MAX_CONCURRENT_NUM * 10;
 const int LISTENQ = 1024;
 const int MAXPATH = 1024;
 

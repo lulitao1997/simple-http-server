@@ -199,7 +199,7 @@ int on_url(http_parser *p, const char *at, size_t len) {
 
     auto check = [&]() {
         if (r.fd < 0) {
-            LOG(WARNING) << "open file " << config.root << (plen ? path_buf : "./") << ": " << strerror(errno);
+            LOG(WARNING) << "open file " << config.root  << '/' << (plen ? path_buf : "./") << ": " << strerror(errno);
             r.set_error_response(404);
             return -1;
         }
