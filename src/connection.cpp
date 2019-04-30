@@ -181,6 +181,11 @@ int on_url(http_parser *p, const char *at, size_t len) {
     auto c = (connection_t*)p->data;
     response_t& r = c->response;
 
+    if (p->method != HTTP_GET) {
+        r.set_error_response(501);
+        return -1; // stop parsing
+    }
+
     if (!dir_fd) {
         dir_fd = open(config.root, O_DIRECTORY);
         LOG_IF(FATAL, dir_fd < 0) << "open dir: " << strerror(errno);
@@ -209,7 +214,7 @@ int on_url(http_parser *p, const char *at, size_t len) {
     struct stat st;
     r.fd = openat(dir_fd, plen ? path_buf : "./", O_RDONLY);
 
-    if (check()) return 0;
+    if (check()) return -1;
 
     LOG_IF(FATAL, fstat(r.fd, &st)) << "stat: " << strerror(errno);
 
@@ -220,7 +225,7 @@ int on_url(http_parser *p, const char *at, size_t len) {
         close(old_fd);
     }
 
-    if (check()) return 0;
+    if (check()) return -1;
 
     // get extension
     if (dot_pos) r.mime = mime_map[(view_t){dot_pos+1, at+len}];
@@ -232,11 +237,17 @@ int on_url(http_parser *p, const char *at, size_t len) {
 
 int on_message_complete(http_parser *p) {
     auto c = (connection_t*)p->data;
+
     c->ev.events |= EPOLLOUT;
     c->ev.events &= ~EPOLLIN;
     LOG_IF(WARNING, epoll_ctl(epoll_fd, EPOLL_CTL_MOD, c->fd, &c->ev)) << "epoll_ctl request";
 
     auto& r = c->response;
+
+    int t = p->http_major*10 + p->http_minor;
+    if (t != 11 && t != 10)
+        r.set_error_response(501);
+
     if (!r.http_major) {
         r.keep_alive = http_should_keep_alive(p) ;
         r.http_major = p->http_major;

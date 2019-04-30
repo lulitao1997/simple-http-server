@@ -36,6 +36,7 @@ struct response_t {
     const char *mime = "text/html";
 
     void set_error_response(int err) {
+        if (http_major) return;
         http_major = 1; http_minor = 0;
         status_code = err;
         keep_alive = false;
