@@ -65,7 +65,7 @@ struct connection_t {
 
     connection_t() {}
 
-    static std::set<std::pair<time_t, connection_t*>> S;
+    static std::set<std::pair<mtime_t, connection_t*>> S;
     decltype(S)::iterator set_ptr; // my position in S. iterator of std::set stays valid after erase/insert.
     // bool response_finished = false;
 

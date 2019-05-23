@@ -12,32 +12,32 @@ int main(int argc, char *argv[]) {
     int listen_fd = server_open_listen_fd();
     DLOG(INFO) << "listen_fd: " << listen_fd;
 
-    epoll_fd = epoll_create1(0);
-    LOG_IF(FATAL, epoll_fd < 0) << "epoll_create1";
+    // epoll_fd = epoll_create1(0);
+    F(epoll_fd = epoll_create1(0));
 
     ev.events = EPOLLIN;
     ev.data.fd = listen_fd;
 
-    LOG_IF(FATAL, epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &ev) < 0)
-        << "epoll_ctl";
+    F(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, listen_fd, &ev));
 
     for (;;) {
-        int nfds = epoll_wait(epoll_fd, events, MAX_CONCURRENT_NUM, 20);
-        LOG_IF(FATAL, nfds < 0) << "error in epoll_wait";
+        // int nfds = epoll_wait(epoll_fd, events, MAX_CONCURRENT_NUM, 20);
+        int nfds = 0;
+        F(nfds = epoll_wait(epoll_fd, events, MAX_CONCURRENT_NUM, 20));
         for (int i=0; i<nfds; i++) {
             int efd = events[i].data.fd;
 
             if (efd == listen_fd) { // Listening socket is ready
                 static sockaddr_in addr;
                 socklen_t saddrlen = sizeof addr;
-                int conn_sock = accept4(listen_fd, (sockaddr*)&addr, &saddrlen, SOCK_NONBLOCK);
+                int conn_sock;
+                F(conn_sock = accept4(listen_fd, (sockaddr*)&addr, &saddrlen, SOCK_NONBLOCK));
 
                 // very important! eliminate 40ms delay,
                 // see https://www.fanhaobai.com/2017/11/40ms-delay-and-tcp-nodelay.html
                 static int enable = 1;
-                setsockopt(conn_sock, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof enable);
+                F(setsockopt(conn_sock, IPPROTO_TCP, TCP_NODELAY, &enable, sizeof enable));
 
-                LOG_IF(FATAL, conn_sock < 0) << "accept4 " << strerror(errno);
                 LOG_IF(FATAL, conn_sock >= MAX_FD) << "conn_sock: " << conn_sock << " is too large.";
 
                 // edge-triggered, make sure we wait after consumed all the things in the r/w buffer
@@ -45,8 +45,7 @@ int main(int argc, char *argv[]) {
                 ev.data.fd = conn_sock;
                 fd2connection[conn_sock].construct(conn_sock, time(NULL), addr, ev);
 
-                LOG_IF(FATAL, epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_sock, &ev) < 0)
-                    << "epoll_ctl: conn_sock";
+                F(epoll_ctl(epoll_fd, EPOLL_CTL_ADD, conn_sock, &ev));
             }
             else { // Existing peer is ready
                 connection_t &c = fd2connection[efd];

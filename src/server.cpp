@@ -1,4 +1,5 @@
 #include "server.hpp"
+#include "utils.hpp"
 #include "mime.hpp"
 
 #include <sys/types.h>
@@ -25,12 +26,11 @@ config_t config;
 int epoll_fd;
 
 int server_open_listen_fd() {
-    int fd = socket(AF_INET, SOCK_STREAM, 0);
-    LOG_IF(FATAL, fd < 0) << "Error opening socket";
+    int fd;
+    F(fd = socket(AF_INET, SOCK_STREAM, 0));
 
     int opt = 1;
-    LOG_IF(FATAL, setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof opt) < 0)
-        << "setsockopt";
+    F(setsockopt(fd, SOL_SOCKET, SO_REUSEPORT, &opt, sizeof opt));
 
     sockaddr_in serv_addr;
     memset(&serv_addr, 0, sizeof serv_addr);
@@ -38,11 +38,9 @@ int server_open_listen_fd() {
     serv_addr.sin_addr.s_addr = INADDR_ANY;
     serv_addr.sin_port = htons(config.port);
 
-    LOG_IF(FATAL, bind(fd, (sockaddr*)(&serv_addr), sizeof serv_addr) < 0)
-        << "bind";
+    F(bind(fd, (sockaddr*)(&serv_addr), sizeof serv_addr));
 
-    LOG_IF(FATAL, listen(fd, LISTENQ) < 0)
-        << "listen";
+    F(listen(fd, LISTENQ));
 
     LOG(INFO) << "PID: " << getpid() << " started listening on: " << config.port;
 

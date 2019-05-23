@@ -2,6 +2,7 @@
 #define UTILS_HPP
 
 #include "server.hpp"
+#include <cstring>
 #include <unistd.h>
 #include <getopt.h>
 
@@ -9,6 +10,13 @@
 
 #include <sys/types.h>
 #include <sys/stat.h>
+
+#define F(func) \
+do { \
+    if ((func) < 0) { \
+        LOG(FATAL) << #func << ": " <<  strerror(errno); \
+    } \
+} while (0)
 
 inline void parse_arguments(int argc, char *argv[]) {
     int opt;
@@ -34,8 +42,7 @@ inline void parse_arguments(int argc, char *argv[]) {
 
     // check wether the root dir exists
     struct stat info;
-    LOG_IF(FATAL, stat(config.root, &info) != 0)
-        << "root dir \"" << config.root << "\" does not exist.\n";
+    F(stat(config.root, &info));
 }
 
 #endif

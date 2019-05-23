@@ -1,6 +1,7 @@
 #include "connection.hpp"
 #include "server.hpp"
 // #include "parser.hpp"
+#include "utils.hpp"
 #include "mime.hpp"
 
 #include <sys/socket.h>
@@ -142,7 +143,7 @@ int connection_t::send_file() {
             if (errno == EAGAIN)
                 return EAGAIN;
             else {
-                DLOG(WARNING) << "connection closed by peer: " << fd << " " << strerror(errno);
+                DLOG(WARNING) << "peer " << fd << ": " << strerror(errno);
                 return -1;
             }
         }
@@ -164,7 +165,7 @@ int connection_t::send_header() {
                 return EAGAIN;
             }
             else {
-                DLOG(WARNING) << "connection closed by peer: " << fd << strerror(errno);
+                DLOG(WARNING) << "peer " << fd << ": " << strerror(errno);
                 return -1;
             }
         }
@@ -187,8 +188,7 @@ int on_url(http_parser *p, const char *at, size_t len) {
     }
 
     if (!dir_fd) {
-        dir_fd = open(config.root, O_DIRECTORY);
-        LOG_IF(FATAL, dir_fd < 0) << "open dir: " << strerror(errno);
+        F(dir_fd = open(config.root, O_DIRECTORY));
     }
 
     DLOG(INFO) << "PATH: " << std::string(at, at+len) << "|";
@@ -216,7 +216,7 @@ int on_url(http_parser *p, const char *at, size_t len) {
 
     if (check()) return -1;
 
-    LOG_IF(FATAL, fstat(r.fd, &st)) << "stat: " << strerror(errno);
+    F(fstat(r.fd, &st));
 
     if (S_ISDIR(st.st_mode)) {
         int old_fd = r.fd;
@@ -229,7 +229,7 @@ int on_url(http_parser *p, const char *at, size_t len) {
 
     // get extension
     if (dot_pos) r.mime = mime_map[(view_t){dot_pos+1, at+len}];
-    LOG_IF(FATAL, fstat(r.fd, &st)) << "stat: " << strerror(errno);
+    F(fstat(r.fd, &st));
     r.content_length = st.st_size;
 
     return 0;
@@ -271,7 +271,7 @@ void connection_t::finish_respond() {
     }
 }
 
-std::set<std::pair<time_t, connection_t*>> connection_t::S;
+std::set<std::pair<mtime_t, connection_t*>> connection_t::S;
 
 void connection_t::close_expired() {
     mtime_t now = mtime();
